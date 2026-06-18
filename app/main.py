@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1.endpoints import (
+    admin,
     alertas,
     auth,
     comentarios,
@@ -71,3 +72,4 @@ app.include_router(midias.router, prefix=PREFIX)
 app.include_router(comentarios.router, prefix=PREFIX)
 app.include_router(ia.router, prefix=PREFIX)
 app.include_router(alertas.router, prefix=PREFIX)
+app.include_router(admin.router, prefix=PREFIX)

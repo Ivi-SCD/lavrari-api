@@ -13,6 +13,7 @@ from app.services.alerta_service import AlertaService
 from app.services.assinatura_service import AssinaturaService
 from app.services.auth_service import AuthService
 from app.services.comentario_service import ComentarioService
+from app.services.dashboard_service import DashboardService
 from app.services.empresa_service import EmpresaService
 from app.services.ia import IAService
 from app.services.midia_service import MidiaService
@@ -73,6 +74,10 @@ def get_pdf_service() -> PDFService:
 
 def get_assinatura_service() -> AssinaturaService:
     return AssinaturaService()
+
+
+def get_dashboard_service() -> DashboardService:
+    return DashboardService()
 
 
 # ---- Autenticação ----

@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import html
+import io
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -104,6 +105,21 @@ class PDFService:
 
     async def _render_pdf(self, html_str: str) -> bytes:
         return await asyncio.to_thread(self._bytes_from_html, html_str)
+
+    @staticmethod
+    def _merge_pdfs(documentos: list[bytes]) -> bytes:
+        """Concatena vários PDFs (páginas inteiras) em um único arquivo."""
+        from pypdf import PdfReader, PdfWriter
+
+        writer = PdfWriter()
+        for doc in documentos:
+            if not doc:
+                continue
+            for pagina in PdfReader(io.BytesIO(doc)).pages:
+                writer.add_page(pagina)
+        saida = io.BytesIO()
+        writer.write(saida)
+        return saida.getvalue()
 
     @staticmethod
     def _watermark(status: str) -> str:
@@ -374,10 +390,22 @@ class PDFService:
             logger.warning("Resumo executivo indisponível: %s", exc)
             resumo = "Resumo executivo indisponível (serviço de IA não configurado)."
 
-        html_str = self._renderizar_html_dossie(
+        html_capa = self._renderizar_html_dossie(
             obra, empresa or {}, rdos, midias, indicadores, resumo, data_inicio, data_fim
         )
-        pdf = await self._render_pdf(html_str)
+        pdf_capa = await self._render_pdf(html_capa)
+
+        # Anexa, na íntegra, cada documento de RDO do período (páginas completas
+        # concatenadas — não apenas resumos).
+        documentos = [pdf_capa]
+        for r in rdos:
+            try:
+                pdf_rdo, _ = await self.gerar_pdf(r["id_rdo"])
+                documentos.append(pdf_rdo)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Falha ao anexar RDO %s ao dossiê: %s", r.get("id_rdo"), exc)
+
+        pdf = await asyncio.to_thread(self._merge_pdfs, documentos)
         try:
             await self.storage.upload_dossie(pdf, id_obra)
         except Exception as exc:  # noqa: BLE001
@@ -432,12 +460,12 @@ class PDFService:
             f"<h2>5. REGISTRO FOTOGRÁFICO</h2><div class='grid2'>{fotos}</div>" if fotos else ""
         )
 
+        # Índice dos RDOs cujos documentos completos seguem anexos, na íntegra.
         rdos_rows = "".join(
             f"<tr><td>{_fmt_data(r.get('data_relatorio'))}</td>"
-            f"<td>{_e(r.get('numero_registro'))}</td><td>{_e(r.get('status'))}</td>"
-            f"<td>{_e((r.get('resumo_dia') or r.get('ocorrencias') or '—'))[:80]}</td></tr>"
+            f"<td>{_e(r.get('numero_registro'))}</td><td>{_e(r.get('status'))}</td></tr>"
             for r in rdos
-        ) or '<tr><td colspan="4" class="muted">—</td></tr>'
+        ) or '<tr><td colspan="3" class="muted">Nenhum RDO no período.</td></tr>'
 
         return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{_CSS}</style></head>
 <body>
@@ -475,6 +503,8 @@ class PDFService:
 
 {fotos_html}
 
-<h2>6. RELATÓRIOS DIÁRIOS (RDOs)</h2>
-<table><tr><th>Data</th><th>Nº</th><th>Status</th><th>Resumo</th></tr>{rdos_rows}</table>
+<h2>6. RELATÓRIOS DIÁRIOS ANEXOS (íntegra)</h2>
+<p class="muted">Os documentos completos de cada RDO listado abaixo seguem anexados na
+íntegra, nas próximas páginas deste dossiê.</p>
+<table><tr><th>Data</th><th>Nº</th><th>Status</th></tr>{rdos_rows}</table>
 </body></html>"""

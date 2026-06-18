@@ -28,3 +28,33 @@ class RDORepository(BaseRepository):
         async for doc in self.collection.aggregate(pipeline):
             resultado[doc["_id"]] = doc["total"]
         return resultado
+
+    async def contar_por_status_global(self) -> dict:
+        pipeline = [{"$group": {"_id": "$status", "total": {"$sum": 1}}}]
+        resultado: dict = {}
+        async for doc in self.collection.aggregate(pipeline):
+            resultado[doc["_id"]] = doc["total"]
+        return resultado
+
+    async def contar_com_restricao(self) -> int:
+        """RDOs com ao menos uma flag de evento/restrição ativa."""
+        flags = [
+            "pessoal",
+            "equipamento",
+            "instalacoes",
+            "cronograma_fisico",
+            "qualidade",
+            "atendimento_fiscalizacao",
+            "administracao_obra",
+            "meio_ambiente",
+        ]
+        ou = [{f"eventos_restricao.{f}": True} for f in flags]
+        return await self.contar({"$or": ou})
+
+    async def ids_por_obras(self, ids_obra: list[str]) -> list[str]:
+        if not ids_obra:
+            return []
+        cursor = self.collection.find(
+            {"id_obra": {"$in": ids_obra}}, {"id_rdo": 1, "_id": 0}
+        )
+        return [d["id_rdo"] async for d in cursor]
