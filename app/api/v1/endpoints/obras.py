@@ -1,9 +1,13 @@
-"""Endpoints de obras, vínculos de usuários, dashboard e alertas da obra."""
+"""Endpoints de obras, vínculos de usuários, dashboard, alertas e evolução visual."""
+
+from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.v1.deps import (
     get_alerta_service,
+    get_ia_service,
     get_obra_service,
     get_usuario_atual,
     requer_acesso_obra,
@@ -13,6 +17,7 @@ from app.api.v1.deps import (
 from app.api.v1.schemas.alerta import AlertaResponse
 from app.api.v1.schemas.obra import (
     DashboardResponse,
+    EvolucaoVisualResponse,
     ObraCreate,
     ObraResponse,
     ObraUpdate,
@@ -23,6 +28,7 @@ from app.api.v1.schemas.obra import (
 )
 from app.globals.enums.usuario.perfil_usuario import PerfilUsuario
 from app.services.alerta_service import AlertaService
+from app.services.ia_service import IAService
 from app.services.obra_service import ObraService
 
 router = APIRouter(prefix="/obras", tags=["obras"])
@@ -262,3 +268,32 @@ async def alertas_da_obra(
     await requer_perfil_obra(id_obra, usuario_atual, _PERFIS_GESTAO)
     await alerta_service.gerar_alertas_obra(id_obra)
     return await alerta_service.listar_por_obra(id_obra)
+
+
+@router.get(
+    "/{id_obra}/evolucao-visual",
+    summary="Evolução Visual da Obra por GPS",
+    description="Agrupa fotos tiradas num raio de X metros de um ponto geográfico e retorna a "
+    "linha do tempo visual do avanço físico daquele trecho da obra. Restrito a Admin ou "
+    "Fiscal SUAPE.",
+    response_model=EvolucaoVisualResponse,
+    responses={
+        200: {"description": "Linha do tempo visual"},
+        403: {"description": "Acesso restrito a admin e fiscal SUAPE"},
+        404: {"description": "Obra não encontrada"},
+    },
+)
+async def evolucao_visual(
+    id_obra: str,
+    lat: float = Query(..., description="Latitude do ponto de referência"),
+    lon: float = Query(..., description="Longitude do ponto de referência"),
+    raio_metros: int = Query(50, ge=1, le=5000),
+    data_inicio: Optional[datetime] = Query(None),
+    data_fim: Optional[datetime] = Query(None),
+    usuario_atual: dict = Depends(get_usuario_atual),
+    ia_service: IAService = Depends(get_ia_service),
+):
+    await requer_perfil_obra(id_obra, usuario_atual, _PERFIS_GESTAO)
+    return await ia_service.evolucao_visual(
+        id_obra, lat, lon, raio_metros, data_inicio, data_fim
+    )

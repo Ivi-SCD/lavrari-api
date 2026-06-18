@@ -1,7 +1,7 @@
 """Schemas de Obra e vínculos Obra-Usuário."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -104,3 +104,18 @@ class DashboardResponse(BaseModel):
     prazo_contratual_dias: int
     percentual_prazo: float
     total_alertas_abertos: int
+
+
+# ---- Diferencial 2: Evolução Visual por GPS ----
+
+
+class PontoGPS(BaseModel):
+    lat: float
+    lon: float
+
+
+class EvolucaoVisualResponse(BaseModel):
+    ponto: PontoGPS
+    raio_metros: int
+    total_fotos: int
+    evolucao: List[dict[str, Any]]
