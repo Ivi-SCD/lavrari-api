@@ -10,12 +10,14 @@ from app.globals.enums.usuario.perfil_usuario import PerfilUsuario
 from app.repositories.obra_usuario_repository import ObraUsuarioRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.services.alerta_service import AlertaService
+from app.services.assinatura_service import AssinaturaService
 from app.services.auth_service import AuthService
 from app.services.comentario_service import ComentarioService
 from app.services.empresa_service import EmpresaService
-from app.services.ia_service import IAService
+from app.services.ia import IAService
 from app.services.midia_service import MidiaService
 from app.services.obra_service import ObraService
+from app.services.pdf_service import PDFService
 from app.services.rdo_service import RDOService
 from app.services.usuario_service import UsuarioService
 from app.services.workflow_service import WorkflowService
@@ -63,6 +65,14 @@ def get_alerta_service() -> AlertaService:
 
 def get_ia_service() -> IAService:
     return IAService()
+
+
+def get_pdf_service() -> PDFService:
+    return PDFService()
+
+
+def get_assinatura_service() -> AssinaturaService:
+    return AssinaturaService()
 
 
 # ---- Autenticação ----

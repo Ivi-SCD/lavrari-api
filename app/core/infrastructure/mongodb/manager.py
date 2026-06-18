@@ -52,6 +52,11 @@ class MongoManager:
             {"keys": [{"token"}, "unique", True]},
             {"keys": [{"id_usuario"}, "unique", False]},
         ],
+        "assinaturas": [
+            {"keys": [{"id_assinatura"}, "unique", True]},
+            {"keys": [{"id_rdo"}, "unique", False]},
+            {"keys": [{"id_usuario"}, "unique", False]},
+        ],
     }
 
     def __init__(self):

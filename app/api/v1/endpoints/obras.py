@@ -1,20 +1,24 @@
-"""Endpoints de obras, vínculos de usuários, dashboard, alertas e evolução visual."""
+"""Endpoints de obras, vínculos, dashboard, alertas, evolução visual e dossiê."""
 
+import io
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import StreamingResponse
 
 from app.api.v1.deps import (
     get_alerta_service,
     get_ia_service,
     get_obra_service,
+    get_pdf_service,
     get_usuario_atual,
     requer_acesso_obra,
     requer_admin,
     requer_perfil_obra,
 )
 from app.api.v1.schemas.alerta import AlertaResponse
+from app.api.v1.schemas.assinatura import DossieRequest
 from app.api.v1.schemas.obra import (
     DashboardResponse,
     EvolucaoVisualResponse,
@@ -28,8 +32,9 @@ from app.api.v1.schemas.obra import (
 )
 from app.globals.enums.usuario.perfil_usuario import PerfilUsuario
 from app.services.alerta_service import AlertaService
-from app.services.ia_service import IAService
+from app.services.ia import IAService
 from app.services.obra_service import ObraService
+from app.services.pdf_service import PDFService
 
 router = APIRouter(prefix="/obras", tags=["obras"])
 
@@ -296,4 +301,35 @@ async def evolucao_visual(
     await requer_perfil_obra(id_obra, usuario_atual, _PERFIS_GESTAO)
     return await ia_service.evolucao_visual(
         id_obra, lat, lon, raio_metros, data_inicio, data_fim
+    )
+
+
+@router.post(
+    "/{id_obra}/dossie",
+    summary="Dossiê Executivo da Obra (IA + PDF)",
+    description="Gera um documento executivo consolidado da obra, com resumo narrativo por IA, "
+    "indicadores, linha do tempo, análise de restrições e registro fotográfico. Restrito a "
+    "Admin ou Fiscal SUAPE.",
+    responses={
+        200: {"description": "Dossiê gerado", "content": {"application/pdf": {}}},
+        403: {"description": "Acesso restrito a admin e fiscal SUAPE"},
+        404: {"description": "Obra não encontrada"},
+    },
+)
+async def dossie(
+    id_obra: str,
+    dados: DossieRequest,
+    usuario_atual: dict = Depends(get_usuario_atual),
+    obra_service: ObraService = Depends(get_obra_service),
+    pdf_service: PDFService = Depends(get_pdf_service),
+):
+    obra = await obra_service.buscar(id_obra)
+    await requer_perfil_obra(id_obra, usuario_atual, _PERFIS_GESTAO)
+    pdf = await pdf_service.gerar_dossie(id_obra, dados.data_inicio, dados.data_fim)
+    contrato = str(obra.get("numero_contrato") or id_obra).replace("/", "-")
+    nome = f"Dossie-Obra-{contrato}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'},
     )

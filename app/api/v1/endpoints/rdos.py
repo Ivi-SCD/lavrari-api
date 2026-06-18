@@ -1,11 +1,15 @@
 """Endpoints de RDOs: CRUD, versões e transições de workflow."""
 
+import io
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import StreamingResponse
 
 from app.api.v1.deps import (
+    get_assinatura_service,
+    get_pdf_service,
     get_rdo_service,
     get_usuario_atual,
     get_workflow_service,
@@ -13,6 +17,7 @@ from app.api.v1.deps import (
     requer_perfil_obra,
     requer_permissao_extra,
 )
+from app.api.v1.schemas.assinatura import AssinarRequest, AssinaturaResponse
 from app.api.v1.schemas.rdo import (
     JustificativaRequest,
     MotivoRequest,
@@ -25,6 +30,8 @@ from app.core.exceptions import PermissionDeniedError
 from app.globals.enums.rdo.status_rdo import StatusRDO
 from app.globals.enums.usuario.perfil_usuario import PerfilUsuario
 from app.repositories.obra_usuario_repository import ObraUsuarioRepository
+from app.services.assinatura_service import AssinaturaService
+from app.services.pdf_service import PDFService
 from app.services.rdo_service import RDOService
 from app.services.workflow_service import WorkflowService
 
@@ -369,3 +376,88 @@ async def finalizar(
     workflow: WorkflowService = Depends(get_workflow_service),
 ):
     return await workflow.finalizar_rdo(id_rdo, usuario_atual)
+
+
+# ---- PDF e Assinatura eletrônica ----
+
+
+@router.get(
+    "/{id_rdo}/pdf",
+    summary="Gerar PDF do RDO",
+    description="Gera o PDF do RDO no formato DNIT 097/2025 e retorna o arquivo para "
+    "download. RDOs fora de BLOQUEADO/FINALIZADO recebem marca d'água 'NÃO OFICIAL'.",
+    responses={
+        200: {"description": "PDF gerado", "content": {"application/pdf": {}}},
+        403: {"description": "Sem acesso ao RDO"},
+        404: {"description": "RDO não encontrado"},
+    },
+)
+async def gerar_pdf(
+    id_rdo: str,
+    usuario_atual: dict = Depends(get_usuario_atual),
+    pdf_service: PDFService = Depends(get_pdf_service),
+    rdo_service: RDOService = Depends(get_rdo_service),
+):
+    rdo = await rdo_service.buscar(id_rdo)
+    await requer_acesso_obra(rdo["id_obra"], usuario_atual)
+    pdf, _ = await pdf_service.gerar_pdf(id_rdo)
+    nome = f"RDO-{rdo.get('numero_registro')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'},
+    )
+
+
+@router.post(
+    "/{id_rdo}/assinar",
+    summary="Assinar RDO eletronicamente",
+    description="Registra aceite eletrônico auditável do RDO. Requer senha do usuário para "
+    "confirmar identidade. Gera PDF, calcula SHA-256 e armazena no COS. Disponível apenas "
+    "para RDOs em status BLOQUEADO ou FINALIZADO.",
+    response_model=AssinaturaResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        201: {"description": "Assinatura registrada"},
+        400: {"description": "Usuário já assinou este RDO"},
+        401: {"description": "Senha incorreta"},
+        403: {"description": "Sem acesso ou RDO não está em status assinável"},
+        404: {"description": "RDO não encontrado"},
+    },
+)
+async def assinar(
+    id_rdo: str,
+    dados: AssinarRequest,
+    request: Request,
+    usuario_atual: dict = Depends(get_usuario_atual),
+    assinatura_service: AssinaturaService = Depends(get_assinatura_service),
+    rdo_service: RDOService = Depends(get_rdo_service),
+):
+    rdo = await rdo_service.buscar(id_rdo)
+    await requer_acesso_obra(rdo["id_obra"], usuario_atual)
+    ip = request.client.host if request.client else None
+    return await assinatura_service.assinar(
+        id_rdo, usuario_atual, dados.senha, dados.papel, dados.cargo, ip
+    )
+
+
+@router.get(
+    "/{id_rdo}/assinaturas",
+    summary="Listar assinaturas do RDO",
+    description="Lista todas as assinaturas eletrônicas registradas para o RDO.",
+    response_model=list[AssinaturaResponse],
+    responses={
+        200: {"description": "Lista de assinaturas"},
+        403: {"description": "Sem acesso"},
+        404: {"description": "RDO não encontrado"},
+    },
+)
+async def listar_assinaturas(
+    id_rdo: str,
+    usuario_atual: dict = Depends(get_usuario_atual),
+    assinatura_service: AssinaturaService = Depends(get_assinatura_service),
+    rdo_service: RDOService = Depends(get_rdo_service),
+):
+    rdo = await rdo_service.buscar(id_rdo)
+    await requer_acesso_obra(rdo["id_obra"], usuario_atual)
+    return await assinatura_service.listar_por_rdo(id_rdo)
