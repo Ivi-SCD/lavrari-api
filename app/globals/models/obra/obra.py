@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Obra(BaseModel):
@@ -30,4 +30,12 @@ class Obra(BaseModel):
     logo_suape_url: Optional[str] = Field(None, description="URL do Logo do Suape")
     logo_contratada_url: Optional[str] = Field(
         None, description="URL do Logo da Empresa Contratada"
+    )
+    criado_em: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Data de Criação",
+    )
+    atualizado_em: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Data de Atualização",
     )
