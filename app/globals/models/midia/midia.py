@@ -15,6 +15,7 @@ class Midia(BaseModel):
     longitude: float = Field(..., description="Longitude da captura")
     data_hora_captura: datetime = Field(..., description="Data e hora da captura")
     ai_analise: Optional[str] = Field(None, description="Análise gerada pela IA")
+    deletado_em: Optional[datetime] = Field(None, description="Soft delete — nulo = ativo")
     criado_por: str = Field(..., description="ID do usuário que enviou a mídia")
     criado_em: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

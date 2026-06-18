@@ -9,6 +9,7 @@ class Usuario(BaseModel):
     nome: str = Field(..., description="Nome do Usuário")
     email: str = Field(..., description="E-mail do Usuário")
     senha_hash: str = Field(..., description="Hash da Senha do Usuário")
+    is_admin: bool = Field(False, description="Administrador global do sistema")
     criado_em: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="Data de Criação",

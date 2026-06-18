@@ -1,11 +1,10 @@
-from app.globals.core.config.settings import get_settings
-from logger import get_logger
-
+import logging
 from typing import Optional
 
-settings = get_settings()
+from app.core.config.settings import get_settings
 
-logger = get_logger(__name__)
+settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 class MongoManager:
@@ -49,6 +48,10 @@ class MongoManager:
             {"keys": [{"id_alerta"}, "unique", True]},
             {"keys": [{"id_obra"}, "unique", False]},
         ],
+        "refresh_tokens": [
+            {"keys": [{"token"}, "unique", True]},
+            {"keys": [{"id_usuario"}, "unique", False]},
+        ],
     }
 
     def __init__(self):
@@ -72,10 +75,6 @@ class MongoManager:
         return self.get_database()[collection_name]
 
     async def ensure_collections_exist(self) -> None:
-        """
-        Ensure all required collections exist and have proper indexes.
-        Safe to call multiple times - will skip existing collections/indexes.
-        """
         if self._initialized:
             return
 
@@ -98,12 +97,9 @@ class MongoManager:
                             unique=index_def.get("unique", False),
                             background=True,
                         )
-                        logger.debug(
-                            f"Created index on {collection_name}: {index_def['keys']}"
-                        )
                     except Exception as idx_error:
                         logger.debug(
-                            f"Index creation skipped (may already exist) on {collection_name}: {idx_error}"
+                            f"Index skipped (may already exist) on {collection_name}: {idx_error}"
                         )
 
             except Exception as e:
@@ -125,7 +121,6 @@ _mongo_manager: Optional[MongoManager] = None
 
 
 def get_mongo_manager() -> MongoManager:
-    """Get or create the MongoDB manager singleton."""
     global _mongo_manager
     if _mongo_manager is None:
         _mongo_manager = MongoManager()
@@ -133,6 +128,5 @@ def get_mongo_manager() -> MongoManager:
 
 
 async def init_database() -> None:
-    """Initialize database collections and indexes. Call on application startup."""
     manager = get_mongo_manager()
     await manager.ensure_collections_exist()

@@ -10,6 +10,7 @@ class ObraUsuario(BaseModel):
     id_obra: str = Field(..., description="ID da Obra")
     id_usuario: str = Field(..., description="ID do Usuário")
     perfil: PerfilUsuario = Field(..., description="Perfil do usuário nesta obra")
+    permissoes_extras: dict = Field(default_factory=dict, description="Permissões temporárias granulares")
     criado_em: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="Data de Criação",

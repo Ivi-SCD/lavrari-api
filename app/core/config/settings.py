@@ -18,10 +18,12 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    STORAGE_ENDPOINT: str = ""
-    STORAGE_ACCESS_KEY: str = ""
-    STORAGE_SECRET_KEY: str = ""
-    STORAGE_BUCKET_NAME: str = "lavrari"
+    # IBM Cloud Object Storage (HMAC credentials)
+    IBM_COS_ENDPOINT: str = ""        # ex: https://s3.br-sao.cloud-object-storage.appdomain.cloud
+    IBM_COS_ACCESS_KEY: str = ""      # cos_hmac_keys.access_key_id
+    IBM_COS_SECRET_KEY: str = ""      # cos_hmac_keys.secret_access_key
+    IBM_COS_BUCKET_NAME: str = "lavrari"
+    IBM_COS_INSTANCE_CRN: str = ""    # resource_instance_id do JSON
     GROQ_API_KEY: str = ""
 
     WEATHER_API_KEY: str = ""
