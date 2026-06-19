@@ -1,6 +1,8 @@
 """Endpoints de IA: transcrição, sugestão, saúde, padrões de NC e agente."""
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.api.v1.deps import (
     get_ia_service,
@@ -12,6 +14,8 @@ from app.api.v1.deps import (
 from app.api.v1.schemas.ia import (
     ChatRequest,
     ChatResponse,
+    EstruturarRDORequest,
+    EstruturarRDOResponse,
     PadroesNCResponse,
     SaudeResponse,
     SugestaoRequest,
@@ -70,6 +74,60 @@ async def sugestao_texto(
     historico = await rdo_service.listar({"id_obra": dados.id_obra}, limit=15)
     resultado = await ia.sugerir_texto_rdo(dados.id_obra, dados.data_relatorio, historico)
     return SugestaoResponse(**resultado)
+
+
+@router.post(
+    "/estruturar-rdo",
+    summary="Estruturar RDO a partir de texto (voz → RDO completo)",
+    description="Recebe a transcrição livre do dia e extrai, de forma estruturada, todos os "
+    "campos editáveis do RDO (clima, pessoal, equipamentos, serviços, restrições, ocorrências "
+    "e resumo). NÃO grava o RDO: devolve a sugestão para o frontend fazer merge e o usuário "
+    "confirmar via PATCH /rdos/{id}. Requer acesso à obra.",
+    response_model=EstruturarRDOResponse,
+    response_model_exclude_none=True,
+    responses={
+        200: {"description": "RDO estruturado (sugestão)"},
+        403: {"description": "Sem acesso à obra"},
+        503: {"description": "IA indisponível"},
+    },
+)
+async def estruturar_rdo(
+    dados: EstruturarRDORequest,
+    usuario_atual: dict = Depends(get_usuario_atual),
+    ia: IAService = Depends(get_ia_service),
+):
+    await requer_acesso_obra(dados.id_obra, usuario_atual)
+    resultado = await ia.estruturar_rdo(dados.texto, dados.data_relatorio)
+    return EstruturarRDOResponse(**resultado)
+
+
+@router.post(
+    "/estruturar-rdo/audio",
+    summary="Estruturar RDO a partir de áudio (transcreve + estrutura)",
+    description="Recebe um áudio, transcreve (whisper) e estrutura o RDO completo numa única "
+    "chamada. Mesma semântica do /estruturar-rdo (sem efeito colateral). Inclui a transcrição "
+    "bruta na resposta. Requer acesso à obra.",
+    response_model=EstruturarRDOResponse,
+    response_model_exclude_none=True,
+    responses={
+        200: {"description": "RDO estruturado (sugestão)"},
+        403: {"description": "Sem acesso à obra"},
+        503: {"description": "IA indisponível"},
+    },
+)
+async def estruturar_rdo_audio(
+    id_obra: str = Form(...),
+    data_relatorio: datetime = Form(...),
+    arquivo: UploadFile = File(...),
+    usuario_atual: dict = Depends(get_usuario_atual),
+    ia: IAService = Depends(get_ia_service),
+):
+    await requer_acesso_obra(id_obra, usuario_atual)
+    conteudo = await arquivo.read()
+    transcricao = await ia.transcrever_audio(conteudo, arquivo.filename or "audio.webm")
+    resultado = await ia.estruturar_rdo(transcricao, data_relatorio)
+    resultado["transcricao"] = transcricao
+    return EstruturarRDOResponse(**resultado)
 
 
 @router.get(

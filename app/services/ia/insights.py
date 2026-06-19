@@ -7,6 +7,7 @@ from typing import cast
 
 from app.core.exceptions import NotFoundError
 from app.globals.enums.alerta.tipo_alerta import SeveridadeAlerta, TipoAlerta
+from app.globals.enums.rdo.fonte_dado_rdo import FonteDado
 from app.globals.models.alerta.alerta import Alerta
 from app.repositories.alerta_repository import AlertaRepository
 from app.repositories.obra_repository import ObraRepository
@@ -14,6 +15,7 @@ from app.repositories.rdo_repository import RDORepository
 from app.services.ia.analytics import _RESTRICAO_FLAGS
 from app.services.ia.llm import (
     MODELO_TEXTO,
+    EstruturaRDOLLM,
     PadroesNCLLM,
     SugestaoLLM,
     get_chat,
@@ -129,6 +131,92 @@ class SugestaoService:
         llm = get_chat(MODELO_TEXTO, 0.5).with_structured_output(SugestaoLLM)
         resultado = cast(SugestaoLLM, await llm.ainvoke(prompt))
         return {"ocorrencias": resultado.ocorrencias, "resumo_dia": resultado.resumo_dia}
+
+
+_RESTRICAO_FLAGS_RDO = (
+    "pessoal",
+    "equipamento",
+    "instalacoes",
+    "cronograma_fisico",
+    "qualidade",
+    "atendimento_fiscalizacao",
+    "administracao_obra",
+    "meio_ambiente",
+)
+
+
+class EstruturarRDOService:
+    """Extrai um RDO completo (estruturado) a partir de fala/texto livre do dia.
+
+    Sem efeito colateral: apenas devolve a sugestão para o frontend fazer merge no
+    formulário; nada é persistido — a gravação segue pelo PATCH /rdos/{id} existente.
+    """
+
+    async def estruturar(self, texto: str, data_relatorio: datetime) -> dict:
+        prompt = (
+            "Você é um engenheiro fiscal que preenche o Registro Diário de Obra (RDO) a "
+            "partir do relato falado do responsável em campo. Extraia APENAS o que estiver "
+            "explícito no relato — nunca invente números, serviços ou restrições. Quando uma "
+            "informação não for mencionada, deixe o campo vazio/nulo.\n\n"
+            "Regras:\n"
+            "- pessoal_direto: mão de obra de produção (pedreiro, servente, carpinteiro...).\n"
+            "- pessoal_indireto: apoio/gestão (encarregado, engenheiro, técnico de segurança...).\n"
+            "- equipamentos: máquinas e equipamentos citados, com quantidade.\n"
+            "- servicos: atividades executadas, com situação (em andamento/concluído/paralisado).\n"
+            "- clima_manha/clima_tarde: só preencha o período citado; praticavel=false se choveu/parou.\n"
+            "- eventos_restricao: marque a(s) categoria(s) só se houver impedimento real e descreva.\n"
+            "- ocorrencias e resumo_dia: redija em português, objetivo.\n"
+            "- confianca: sua autoavaliação de 0.0 a 1.0 da fidelidade da extração.\n\n"
+            f"Data do relatório: {data_relatorio.date().isoformat()}\n"
+            f"RELATO DO DIA:\n{texto}"
+        )
+        llm = get_chat(MODELO_TEXTO, 0.1).with_structured_output(EstruturaRDOLLM)
+        r = cast(EstruturaRDOLLM, await llm.ainvoke(prompt))
+        return self._montar(r)
+
+    @staticmethod
+    def _clima(bloco) -> dict | None:
+        if not bloco or not (bloco.tempo or "").strip():
+            return None
+        return {
+            "tempo": bloco.tempo.strip(),
+            "praticavel": bool(bloco.praticavel),
+            "fonte": FonteDado.TRANSCRICAO.value,
+        }
+
+    def _montar(self, r: EstruturaRDOLLM) -> dict:
+        resultado: dict = {}
+
+        clima_m = self._clima(r.clima_manha)
+        if clima_m:
+            resultado["clima_manha"] = clima_m
+        clima_t = self._clima(r.clima_tarde)
+        if clima_t:
+            resultado["clima_tarde"] = clima_t
+
+        if r.pessoal_direto:
+            resultado["pessoal_direto"] = [i.model_dump() for i in r.pessoal_direto]
+        if r.pessoal_indireto:
+            resultado["pessoal_indireto"] = [i.model_dump() for i in r.pessoal_indireto]
+        if r.equipamentos:
+            resultado["equipamentos"] = [i.model_dump() for i in r.equipamentos]
+        if r.servicos:
+            resultado["servicos"] = [i.model_dump() for i in r.servicos]
+
+        if r.eventos_restricao:
+            ev = r.eventos_restricao
+            tem_flag = any(getattr(ev, f) for f in _RESTRICAO_FLAGS_RDO)
+            if tem_flag or (ev.descricao or "").strip():
+                resultado["eventos_restricao"] = ev.model_dump()
+
+        if (r.ocorrencias or "").strip():
+            resultado["ocorrencias"] = r.ocorrencias.strip()
+        if (r.resumo_dia or "").strip():
+            resultado["resumo_dia"] = r.resumo_dia.strip()
+
+        resultado["campos_preenchidos"] = list(resultado.keys())
+        resultado["confianca"] = round(max(0.0, min(float(r.confianca or 0.0), 1.0)), 2)
+        return resultado
 
 
 class ResumoExecutivoService:

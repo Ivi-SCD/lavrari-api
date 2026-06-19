@@ -11,6 +11,7 @@ from typing import Optional
 from app.services.ia.agente import AgenteChatService
 from app.services.ia.analytics import EvolucaoService, SaudeService
 from app.services.ia.insights import (
+    EstruturarRDOService,
     PadroesService,
     ResumoExecutivoService,
     SugestaoService,
@@ -27,6 +28,7 @@ class IAService:
         self._media = MediaIAService()
         self._resumo = ResumoExecutivoService()
         self._agente = AgenteChatService()
+        self._estruturar = EstruturarRDOService()
 
     async def transcrever_audio(
         self, audio_bytes: bytes, filename: str = "audio.m4a"
@@ -40,6 +42,9 @@ class IAService:
         self, id_obra: str, data: datetime, historico_rdos: list[dict]
     ) -> dict:
         return await self._sugestao.sugerir(id_obra, data, historico_rdos)
+
+    async def estruturar_rdo(self, texto: str, data_relatorio: datetime) -> dict:
+        return await self._estruturar.estruturar(texto, data_relatorio)
 
     async def calcular_saude_obra(self, id_obra: str) -> dict:
         return await self._saude.calcular(id_obra)
