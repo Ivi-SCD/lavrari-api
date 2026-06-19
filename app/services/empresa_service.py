@@ -1,12 +1,12 @@
 """Serviço de gestão de empresas."""
 
 import asyncio
-import io
 import uuid
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.globals.models.empresa.empresa import Empresa
 from app.repositories.empresa_repository import EmpresaRepository
+from app.services.image_utils import redimensionar_para_caixa
 from app.services.storage_service import StorageService
 
 # Caixa padrão da logo no card. A imagem é redimensionada para caber dentro
@@ -48,33 +48,11 @@ class EmpresaService:
                 raise ConflictError("CNPJ já utilizado por outra empresa.")
         return await self.repo.atualizar(id_empresa, dados)
 
-    @staticmethod
-    def _redimensionar_logo(conteudo: bytes) -> bytes:
-        """Ajusta a logo à caixa padrão do card preservando a proporção (sem esticar).
-
-        Usa thumbnail (que mantém o aspect ratio) e exporta PNG com transparência
-        preservada, evitando distorção ao encaixar no card."""
-        from PIL import Image, UnidentifiedImageError
-
-        try:
-            imagem = Image.open(io.BytesIO(conteudo))
-            imagem.load()
-        except (UnidentifiedImageError, OSError) as exc:
-            raise ValidationError("Arquivo de imagem inválido ou corrompido.") from exc
-
-        if imagem.mode not in ("RGB", "RGBA"):
-            imagem = imagem.convert("RGBA")
-        imagem.thumbnail(_LOGO_MAX, Image.LANCZOS)
-
-        saida = io.BytesIO()
-        imagem.save(saida, format="PNG", optimize=True)
-        return saida.getvalue()
-
     async def atualizar_logo(self, id_empresa: str, conteudo: bytes) -> dict:
         """Redimensiona a logo, envia ao storage e atualiza a empresa."""
         await self.buscar(id_empresa)
         if not conteudo:
             raise ValidationError("Arquivo de logo vazio.")
-        processada = await asyncio.to_thread(self._redimensionar_logo, conteudo)
+        processada = await asyncio.to_thread(redimensionar_para_caixa, conteudo, _LOGO_MAX)
         url, _ = await self.storage.upload_logo(processada, id_empresa, "image/png")
         return await self.repo.atualizar(id_empresa, {"logo_url": url})

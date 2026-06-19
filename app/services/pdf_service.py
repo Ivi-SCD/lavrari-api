@@ -193,6 +193,25 @@ class PDFService:
         url, _ = await self.storage.upload_pdf(pdf, id_rdo)
         return url, hash_doc
 
+    async def gerar_pdf_de_snapshot(self, snapshot: dict) -> tuple[bytes, str]:
+        """Renderiza o PDF a partir de um snapshot de versão (dados da obra/RDO congelados),
+        garantindo imutabilidade — não lê a obra/empresa ao vivo. Mídias e assinaturas são
+        carregadas do RDO (são append/soft-delete, vinculadas ao próprio RDO)."""
+        obra = snapshot.get("obra") or {}
+        id_rdo = snapshot.get("id_rdo")
+        ctx = {
+            "rdo": snapshot,
+            "obra": obra,
+            "empresa": {"razao_social": obra.get("empresa_contratada")},
+            "midias": await self.midia_repo.listar_por_rdo(id_rdo) if id_rdo else [],
+            "assinaturas": await self.assinatura_repo.listar_por_rdo(id_rdo) if id_rdo else [],
+        }
+        html_core = self._renderizar_html_rdo(ctx, hash_documento=None)
+        hash_doc = self._calcular_hash(html_core)
+        html_final = self._renderizar_html_rdo(ctx, hash_documento=hash_doc)
+        pdf = await self._render_pdf(html_final)
+        return pdf, hash_doc
+
     def _renderizar_html_rdo(self, ctx: dict, hash_documento: Optional[str]) -> str:
         rdo, obra, empresa = ctx["rdo"], ctx["obra"], ctx["empresa"]
         midias, assinaturas = ctx["midias"], ctx["assinaturas"]
@@ -297,7 +316,8 @@ class PDFService:
 <body>{self._watermark(status)}
 <div class="cab">
   <div>{self._logo(obra.get('logo_suape_url'), 'SUAPE')}
-       &nbsp; {self._logo(obra.get('logo_contratada_url'), _e(empresa.get('razao_social') or 'Contratada'))}</div>
+       &nbsp; {self._logo(obra.get('logo_contratada_url'), _e(empresa.get('razao_social') or 'Contratada'))}
+       {('&nbsp; ' + self._logo(obra.get('logo_fiscalizacao_externa_url'), '')) if obra.get('logo_fiscalizacao_externa_url') else ''}</div>
   <div class="meta">Registro nº {_e(rdo.get('numero_registro'))}<br>
        Data: {_fmt_data(rdo.get('data_relatorio'))}<br>
        Contrato: {_e(obra.get('numero_contrato'))}<br>
@@ -514,7 +534,8 @@ class PDFService:
 <body>
 <div class="cab">
   <div>{self._logo(obra.get('logo_suape_url'), 'SUAPE')} &nbsp;
-       {self._logo(obra.get('logo_contratada_url'), _e(empresa.get('razao_social') or 'Contratada'))}</div>
+       {self._logo(obra.get('logo_contratada_url'), _e(empresa.get('razao_social') or 'Contratada'))}
+       {('&nbsp; ' + self._logo(obra.get('logo_fiscalizacao_externa_url'), '')) if obra.get('logo_fiscalizacao_externa_url') else ''}</div>
   <div class="meta">Contrato: {_e(obra.get('numero_contrato'))}<br>
        Período: {periodo}<br>Gerado em: {_fmt_data(datetime.now(timezone.utc))}<br>
        Gerado por: IA Lavrari</div>

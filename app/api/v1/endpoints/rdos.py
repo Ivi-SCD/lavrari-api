@@ -233,6 +233,36 @@ async def detalhar_versao(
     return await service.buscar_versao(id_rdo, versao)
 
 
+@router.get(
+    "/{id_rdo}/versoes/{versao}/pdf",
+    summary="PDF imutável de uma versão",
+    description="Reproduz, na íntegra, o documento PDF daquela versão a partir do snapshot "
+    "congelado (obra, responsáveis, ART e logos como estavam naquele momento). Alterações "
+    "posteriores na obra não afetam este documento. Requer acesso à obra.",
+    responses={
+        200: {"description": "PDF da versão", "content": {"application/pdf": {}}},
+        404: {"description": "Versão não encontrada"},
+    },
+)
+async def pdf_versao(
+    id_rdo: str,
+    versao: int,
+    usuario_atual: dict = Depends(get_usuario_atual),
+    service: RDOService = Depends(get_rdo_service),
+    pdf_service: PDFService = Depends(get_pdf_service),
+):
+    rdo = await service.buscar(id_rdo)
+    await requer_acesso_obra(rdo["id_obra"], usuario_atual)
+    versao_doc = await service.buscar_versao(id_rdo, versao)
+    pdf, _ = await pdf_service.gerar_pdf_de_snapshot(versao_doc["snapshot"])
+    nome = f"RDO-{rdo.get('numero_registro')}-v{versao}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'},
+    )
+
+
 # ---- Transições de workflow ----
 
 

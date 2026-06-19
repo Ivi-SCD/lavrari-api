@@ -50,6 +50,9 @@ class Obra(BaseModel):
     logo_contratada_url: Optional[str] = Field(
         None, description="URL do Logo da Empresa Contratada"
     )
+    logo_fiscalizacao_externa_url: Optional[str] = Field(
+        None, description="URL do Logo da Empresa de Fiscalização Externa (opcional)"
+    )
     criado_em: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="Data de Criação",

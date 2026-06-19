@@ -36,6 +36,7 @@ class ObraCreate(BaseModel):
     prazo_contratual_dias: int
     logo_suape_url: Optional[str] = None
     logo_contratada_url: Optional[str] = None
+    logo_fiscalizacao_externa_url: Optional[str] = None
 
 
 class ObraUpdate(BaseModel):
@@ -59,6 +60,7 @@ class ObraUpdate(BaseModel):
     prazo_contratual_dias: Optional[int] = None
     logo_suape_url: Optional[str] = None
     logo_contratada_url: Optional[str] = None
+    logo_fiscalizacao_externa_url: Optional[str] = None
 
 
 class ObraResponse(BaseModel):
@@ -84,6 +86,7 @@ class ObraResponse(BaseModel):
     prazo_contratual_dias: int
     logo_suape_url: Optional[str] = None
     logo_contratada_url: Optional[str] = None
+    logo_fiscalizacao_externa_url: Optional[str] = None
 
 
 class ObraUsuarioCreate(BaseModel):

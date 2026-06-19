@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.v1.deps import get_usuario_atual, get_usuario_service, requer_admin
 from app.api.v1.schemas.auth import UsuarioResponse
-from app.api.v1.schemas.usuario import UsuarioCreate, UsuarioUpdate
+from app.api.v1.schemas.usuario import (
+    UsuarioCreate,
+    UsuarioUpdate,
+    VinculoUsuarioResponse,
+)
 from app.core.exceptions import PermissionDeniedError
 from app.services.usuario_service import UsuarioService
 
@@ -61,6 +65,30 @@ async def detalhar(
     service: UsuarioService = Depends(get_usuario_service),
 ):
     return await service.buscar(id_usuario)
+
+
+@router.get(
+    "/{id_usuario}/vinculos",
+    summary="Listar vínculos e permissões do usuário",
+    description="Lista os vínculos do usuário com as obras, incluindo perfil, permissões "
+    "extras temporárias e a data de expiração de cada uma. Permite ao admin (ou ao próprio "
+    "usuário) verificar quem possui qual permissão e por quanto tempo. Restrito ao próprio "
+    "usuário ou a um admin.",
+    response_model=list[VinculoUsuarioResponse],
+    responses={
+        200: {"description": "Vínculos e permissões"},
+        403: {"description": "Sem permissão"},
+        404: {"description": "Não encontrado"},
+    },
+)
+async def listar_vinculos(
+    id_usuario: str,
+    usuario_atual: dict = Depends(get_usuario_atual),
+    service: UsuarioService = Depends(get_usuario_service),
+):
+    if not usuario_atual.get("is_admin") and usuario_atual["id_usuario"] != id_usuario:
+        raise PermissionDeniedError("Você só pode consultar seus próprios vínculos.")
+    return await service.listar_vinculos(id_usuario)
 
 
 @router.patch(

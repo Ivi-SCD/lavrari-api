@@ -80,6 +80,8 @@ class RdoVersaoResponse(BaseModel):
     snapshot: dict[str, Any]
     acao: AcaoVersao
     justificativa: Optional[str] = None
+    pdf_url: Optional[str] = None
+    pdf_hash: Optional[str] = None
     criado_por: str
     criado_por_nome: str
     criado_em: datetime

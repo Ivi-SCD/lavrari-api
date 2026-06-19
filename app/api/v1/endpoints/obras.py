@@ -4,7 +4,7 @@ import io
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from app.api.v1.deps import (
@@ -31,6 +31,7 @@ from app.api.v1.schemas.obra import (
     ObraUsuarioUpdate,
     PermissoesExtrasUpdate,
 )
+from app.core.exceptions import ValidationError
 from app.globals.enums.usuario.perfil_usuario import PerfilUsuario
 from app.services.alerta_service import AlertaService
 from app.services.ia import IAService
@@ -40,6 +41,7 @@ from app.services.pdf_service import PDFService
 router = APIRouter(prefix="/obras", tags=["obras"])
 
 _PERFIS_GESTAO = (PerfilUsuario.FISCAL_SUAPE,)
+_TIPOS_IMAGEM = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
 
 
 @router.get(
@@ -118,6 +120,33 @@ async def atualizar(
     service: ObraService = Depends(get_obra_service),
 ):
     return await service.atualizar(id_obra, dados.model_dump(exclude_unset=True))
+
+
+@router.post(
+    "/{id_obra}/logos/{slot}",
+    summary="Enviar logo da obra (SUAPE / contratada / fiscalização externa)",
+    description="Faz upload de uma das logos exibidas no cabeçalho dos documentos. "
+    "slot ∈ {suape, contratada, fiscalizacao_externa}. A imagem é redimensionada para a "
+    "dimensão padrão do documento preservando a proporção (sem esticar). Restrito a admins.",
+    response_model=ObraResponse,
+    responses={
+        200: {"description": "Logo atualizada"},
+        403: {"description": "Apenas admin"},
+        404: {"description": "Obra não encontrada"},
+        422: {"description": "Slot ou imagem inválidos"},
+    },
+)
+async def enviar_logo_obra(
+    id_obra: str,
+    slot: str,
+    arquivo: UploadFile = File(...),
+    _admin: dict = Depends(requer_admin),
+    service: ObraService = Depends(get_obra_service),
+):
+    if arquivo.content_type not in _TIPOS_IMAGEM:
+        raise ValidationError("Formato de imagem não suportado.")
+    conteudo = await arquivo.read()
+    return await service.atualizar_logo(id_obra, slot, conteudo)
 
 
 # ---- Vínculos Obra-Usuário ----

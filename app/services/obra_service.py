@@ -1,5 +1,6 @@
 """Serviço de gestão de obras e vínculos de usuários."""
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -15,6 +16,18 @@ from app.repositories.obra_usuario_repository import ObraUsuarioRepository
 from app.repositories.rdo_repository import RDORepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.services.geocoding_service import GeocodingService
+from app.services.image_utils import redimensionar_para_caixa
+from app.services.storage_service import StorageService
+
+# Caixa do logo no cabeçalho do documento (proporção preservada, sem esticar).
+_LOGO_OBRA_MAX = (600, 200)
+
+# Slot de logo → campo persistido na obra.
+_LOGO_SLOTS = {
+    "suape": "logo_suape_url",
+    "contratada": "logo_contratada_url",
+    "fiscalizacao_externa": "logo_fiscalizacao_externa_url",
+}
 
 
 class ObraService:
@@ -27,6 +40,7 @@ class ObraService:
         self.alerta_repo = AlertaRepository()
         self.midia_repo = MidiaRepository()
         self.geocoding = GeocodingService()
+        self.storage = StorageService()
 
     async def listar_acessiveis(self, usuario: dict, skip: int = 0, limit: int = 100) -> list[dict]:
         if usuario.get("is_admin"):
@@ -84,6 +98,23 @@ class ObraService:
             if endereco:
                 dados["endereco"] = endereco
         return await self.repo.atualizar(id_obra, dados)
+
+    async def atualizar_logo(self, id_obra: str, slot: str, conteudo: bytes) -> dict:
+        """Redimensiona e envia uma das logos da obra (suape/contratada/fiscalizacao_externa)
+        na dimensão padrão do cabeçalho do documento."""
+        await self.buscar(id_obra)
+        campo = _LOGO_SLOTS.get(slot)
+        if not campo:
+            raise ValidationError(
+                f"Slot de logo inválido. Use um de: {', '.join(_LOGO_SLOTS)}."
+            )
+        if not conteudo:
+            raise ValidationError("Arquivo de logo vazio.")
+        processada = await asyncio.to_thread(
+            redimensionar_para_caixa, conteudo, _LOGO_OBRA_MAX
+        )
+        url, _ = await self.storage.upload_logo_obra(processada, id_obra, slot, "image/png")
+        return await self.repo.atualizar(id_obra, {campo: url})
 
     # ---- Vínculos Obra-Usuário ----
 
