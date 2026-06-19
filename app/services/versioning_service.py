@@ -22,17 +22,26 @@ class VersioningService:
         obra = await self.obra_repo.buscar_por_id(id_obra)
         if not obra:
             return {}
-        contratada = await self.empresa_repo.buscar_por_id(obra["id_empresa_contratada"])
+        contratada = await self.empresa_repo.buscar_por_id(
+            obra["id_empresa_contratada"]
+        )
         fiscal_suape = await self.usuario_repo.buscar_por_id(obra["id_fiscal_suape"])
         fiscal_externo = None
         if obra.get("id_fiscal_externo"):
-            fiscal_externo = await self.usuario_repo.buscar_por_id(obra["id_fiscal_externo"])
+            fiscal_externo = await self.usuario_repo.buscar_por_id(
+                obra["id_fiscal_externo"]
+            )
         return {
             "numero_contrato": obra.get("numero_contrato"),
             "objeto_contratual": obra.get("objeto_contratual"),
-            "empresa_contratada": contratada.get("razao_social") if contratada else None,
+            "empresa_contratada": (
+                contratada.get("razao_social") if contratada else None
+            ),
             "fiscal_suape": fiscal_suape.get("nome") if fiscal_suape else None,
+            "art_fiscal_suape": obra.get("art_fiscal_suape"),
             "fiscal_externo": fiscal_externo.get("nome") if fiscal_externo else None,
+            "art_fiscal_externo": obra.get("art_fiscal_externo"),
+            "responsaveis": obra.get("responsaveis") or [],
         }
 
     async def criar_versao(
