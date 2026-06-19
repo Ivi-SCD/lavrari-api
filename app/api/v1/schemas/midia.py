@@ -15,6 +15,7 @@ class MidiaResponse(BaseModel):
     storage_url: str
     latitude: float
     longitude: float
+    endereco: Optional[str] = None
     data_hora_captura: datetime
     ai_analise: Optional[str] = None
     criado_por: str

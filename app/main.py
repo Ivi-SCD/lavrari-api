@@ -13,6 +13,7 @@ from app.api.v1.endpoints import (
     alertas,
     auth,
     comentarios,
+    config,
     empresas,
     ia,
     midias,
@@ -73,3 +74,4 @@ app.include_router(comentarios.router, prefix=PREFIX)
 app.include_router(ia.router, prefix=PREFIX)
 app.include_router(alertas.router, prefix=PREFIX)
 app.include_router(admin.router, prefix=PREFIX)
+app.include_router(config.router, prefix=PREFIX)

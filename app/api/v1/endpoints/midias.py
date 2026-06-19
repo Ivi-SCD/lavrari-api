@@ -105,7 +105,11 @@ async def upload(
         usuario_atual,
     )
     background_tasks.add_task(
-        service.analisar_em_background, midia["id_midia"], midia["storage_url"]
+        service.processar_em_background,
+        midia["id_midia"],
+        midia["storage_url"],
+        latitude,
+        longitude,
     )
     return midia
 

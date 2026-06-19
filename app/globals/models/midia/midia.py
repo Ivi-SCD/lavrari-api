@@ -13,6 +13,9 @@ class Midia(BaseModel):
     storage_url: str = Field(..., description="URL do arquivo no storage")
     latitude: float = Field(..., description="Latitude da captura")
     longitude: float = Field(..., description="Longitude da captura")
+    endereco: Optional[str] = Field(
+        None, description="Endereço (logradouro) resolvido por geocodificação reversa"
+    )
     data_hora_captura: datetime = Field(..., description="Data e hora da captura")
     ai_analise: Optional[str] = Field(None, description="Análise gerada pela IA")
     deletado_em: Optional[datetime] = Field(None, description="Soft delete — nulo = ativo")

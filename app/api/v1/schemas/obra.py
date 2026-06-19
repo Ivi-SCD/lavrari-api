@@ -8,6 +8,13 @@ from pydantic import BaseModel, Field
 from app.globals.enums.usuario.perfil_usuario import PerfilUsuario
 
 
+class ResponsavelObraSchema(BaseModel):
+    nome: str
+    art: Optional[str] = None
+    cargo: Optional[str] = None
+    documento: Optional[str] = None
+
+
 class ObraCreate(BaseModel):
     numero_contrato: str
     objeto_contratual: str
@@ -18,7 +25,10 @@ class ObraCreate(BaseModel):
     id_empresa_contratada: str
     id_empresa_supervisora: Optional[str] = None
     id_fiscal_suape: str
+    art_fiscal_suape: Optional[str] = None
     id_fiscal_externo: Optional[str] = None
+    art_fiscal_externo: Optional[str] = None
+    responsaveis: List[ResponsavelObraSchema] = Field(default_factory=list)
     data_inicio_vigencia: datetime
     data_fim_vigencia: datetime
     data_inicio_execucao: datetime
@@ -38,7 +48,10 @@ class ObraUpdate(BaseModel):
     id_empresa_contratada: Optional[str] = None
     id_empresa_supervisora: Optional[str] = None
     id_fiscal_suape: Optional[str] = None
+    art_fiscal_suape: Optional[str] = None
     id_fiscal_externo: Optional[str] = None
+    art_fiscal_externo: Optional[str] = None
+    responsaveis: Optional[List[ResponsavelObraSchema]] = None
     data_inicio_vigencia: Optional[datetime] = None
     data_fim_vigencia: Optional[datetime] = None
     data_inicio_execucao: Optional[datetime] = None
@@ -56,10 +69,14 @@ class ObraResponse(BaseModel):
     local_descricao: str
     latitude_obra: Optional[float] = None
     longitude_obra: Optional[float] = None
+    endereco: Optional[str] = None
     id_empresa_contratada: str
     id_empresa_supervisora: Optional[str] = None
     id_fiscal_suape: str
+    art_fiscal_suape: Optional[str] = None
     id_fiscal_externo: Optional[str] = None
+    art_fiscal_externo: Optional[str] = None
+    responsaveis: List[ResponsavelObraSchema] = Field(default_factory=list)
     data_inicio_vigencia: datetime
     data_fim_vigencia: datetime
     data_inicio_execucao: datetime
@@ -90,6 +107,8 @@ class ObraUsuarioResponse(BaseModel):
     id_obra_usuario: str
     id_obra: str
     id_usuario: str
+    nome: Optional[str] = None
+    email: Optional[str] = None
     perfil: PerfilUsuario
     permissoes_extras: dict
     criado_em: datetime
@@ -119,3 +138,31 @@ class EvolucaoVisualResponse(BaseModel):
     raio_metros: int
     total_fotos: int
     evolucao: List[dict[str, Any]]
+
+
+# ---- Mapa 3D (Cesium): evidências georreferenciadas ----
+
+
+class EvidenciaMapa(BaseModel):
+    id_midia: str
+    id_rdo: str
+    numero_registro: Optional[int] = None
+    data_relatorio: Optional[datetime] = None
+    latitude: float
+    longitude: float
+    endereco: Optional[str] = None
+    storage_url: str
+    data_hora_captura: Optional[datetime] = None
+    ai_analise: Optional[str] = None
+
+
+class CentroMapa(BaseModel):
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+
+
+class MapaEvidenciasResponse(BaseModel):
+    id_obra: str
+    centro: CentroMapa
+    total: int
+    evidencias: List[EvidenciaMapa]

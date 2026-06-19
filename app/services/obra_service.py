@@ -10,9 +10,11 @@ from app.globals.models.obra_usuario.obra_usuario import ObraUsuario
 from app.repositories.alerta_repository import AlertaRepository
 from app.repositories.empresa_repository import EmpresaRepository
 from app.repositories.obra_repository import ObraRepository
+from app.repositories.midia_repository import MidiaRepository
 from app.repositories.obra_usuario_repository import ObraUsuarioRepository
 from app.repositories.rdo_repository import RDORepository
 from app.repositories.usuario_repository import UsuarioRepository
+from app.services.geocoding_service import GeocodingService
 
 
 class ObraService:
@@ -23,6 +25,8 @@ class ObraService:
         self.empresa_repo = EmpresaRepository()
         self.rdo_repo = RDORepository()
         self.alerta_repo = AlertaRepository()
+        self.midia_repo = MidiaRepository()
+        self.geocoding = GeocodingService()
 
     async def listar_acessiveis(self, usuario: dict, skip: int = 0, limit: int = 100) -> list[dict]:
         if usuario.get("is_admin"):
@@ -53,6 +57,11 @@ class ObraService:
         ):
             raise ValidationError("Fiscal externo não encontrado.")
 
+        if dados.get("latitude_obra") is not None and dados.get("longitude_obra") is not None:
+            dados["endereco"] = await self.geocoding.reverso(
+                dados["latitude_obra"], dados["longitude_obra"]
+            )
+
         obra = Obra(id_obra=str(uuid.uuid4()), **dados)
         criada = await self.repo.criar(obra.model_dump())
 
@@ -65,8 +74,15 @@ class ObraService:
         return criada
 
     async def atualizar(self, id_obra: str, dados: dict) -> dict:
-        await self.buscar(id_obra)
+        atual = await self.buscar(id_obra)
         dados = {k: v for k, v in dados.items() if v is not None}
+        # Reresolve o endereço quando a coordenada da obra muda.
+        lat = dados.get("latitude_obra", atual.get("latitude_obra"))
+        lon = dados.get("longitude_obra", atual.get("longitude_obra"))
+        if ("latitude_obra" in dados or "longitude_obra" in dados) and lat is not None and lon is not None:
+            endereco = await self.geocoding.reverso(lat, lon)
+            if endereco:
+                dados["endereco"] = endereco
         return await self.repo.atualizar(id_obra, dados)
 
     # ---- Vínculos Obra-Usuário ----
@@ -98,7 +114,13 @@ class ObraService:
 
     async def listar_usuarios(self, id_obra: str) -> list[dict]:
         await self.buscar(id_obra)
-        return await self.obra_usuario_repo.listar_por_obra(id_obra)
+        vinculos = await self.obra_usuario_repo.listar_por_obra(id_obra)
+        # Enriquece cada vínculo com nome e e-mail do usuário (a UI exibe o nome, não o ID).
+        for v in vinculos:
+            usuario = await self.usuario_repo.buscar_por_id(v["id_usuario"])
+            v["nome"] = usuario.get("nome") if usuario else None
+            v["email"] = usuario.get("email") if usuario else None
+        return vinculos
 
     async def _buscar_vinculo(self, id_obra: str, id_usuario: str) -> dict:
         vinculo = await self.obra_usuario_repo.buscar_por_obra_e_usuario(id_obra, id_usuario)
@@ -126,6 +148,40 @@ class ObraService:
         return await self.obra_usuario_repo.atualizar(
             vinculo["id_obra_usuario"], {"permissoes_extras": atuais}
         )
+
+    # ---- Mapa de evidências georreferenciadas ----
+
+    async def mapa_evidencias(self, id_obra: str) -> dict:
+        """Retorna todas as fotos georreferenciadas da obra (de todos os RDOs) para
+        plotagem no mapa 3D (Cesium) com popups da linha do tempo de evidências."""
+        obra = await self.buscar(id_obra)
+        rdos = await self.rdo_repo.listar({"id_obra": id_obra}, limit=1000)
+        numero_por_rdo = {r["id_rdo"]: r.get("numero_registro") for r in rdos}
+        data_por_rdo = {r["id_rdo"]: r.get("data_relatorio") for r in rdos}
+        midias = await self.midia_repo.listar_por_rdos(list(numero_por_rdo.keys()))
+
+        evidencias = [
+            {
+                "id_midia": m["id_midia"],
+                "id_rdo": m["id_rdo"],
+                "numero_registro": numero_por_rdo.get(m["id_rdo"]),
+                "data_relatorio": data_por_rdo.get(m["id_rdo"]),
+                "latitude": m.get("latitude"),
+                "longitude": m.get("longitude"),
+                "endereco": m.get("endereco"),
+                "storage_url": m.get("storage_url"),
+                "data_hora_captura": m.get("data_hora_captura"),
+                "ai_analise": m.get("ai_analise"),
+            }
+            for m in midias
+            if m.get("latitude") is not None and m.get("longitude") is not None
+        ]
+        return {
+            "id_obra": id_obra,
+            "centro": {"lat": obra.get("latitude_obra"), "lon": obra.get("longitude_obra")},
+            "total": len(evidencias),
+            "evidencias": evidencias,
+        }
 
     # ---- Dashboard ----
 

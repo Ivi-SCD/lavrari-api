@@ -22,6 +22,7 @@ from app.api.v1.schemas.assinatura import DossieRequest
 from app.api.v1.schemas.obra import (
     DashboardResponse,
     EvolucaoVisualResponse,
+    MapaEvidenciasResponse,
     ObraCreate,
     ObraResponse,
     ObraUpdate,
@@ -302,6 +303,28 @@ async def evolucao_visual(
     return await ia_service.evolucao_visual(
         id_obra, lat, lon, raio_metros, data_inicio, data_fim
     )
+
+
+@router.get(
+    "/{id_obra}/mapa-evidencias",
+    summary="Mapa de evidências georreferenciadas",
+    description="Lista todas as fotos georreferenciadas da obra (de todos os RDOs) com "
+    "coordenadas, endereço e análise, para plotagem no mapa 3D com popups da linha do "
+    "tempo de evidências. Requer acesso à obra.",
+    response_model=MapaEvidenciasResponse,
+    responses={
+        200: {"description": "Evidências georreferenciadas"},
+        403: {"description": "Sem acesso"},
+        404: {"description": "Obra não encontrada"},
+    },
+)
+async def mapa_evidencias(
+    id_obra: str,
+    usuario_atual: dict = Depends(get_usuario_atual),
+    service: ObraService = Depends(get_obra_service),
+):
+    await requer_acesso_obra(id_obra, usuario_atual)
+    return await service.mapa_evidencias(id_obra)
 
 
 @router.post(

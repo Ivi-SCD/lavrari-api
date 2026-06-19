@@ -11,6 +11,7 @@ from app.globals.enums.rdo.status_rdo import StatusRDO
 from app.globals.models.midia.midia import Midia
 from app.repositories.midia_repository import MidiaRepository
 from app.repositories.rdo_repository import RDORepository
+from app.services.geocoding_service import GeocodingService
 from app.services.ia import IAService
 from app.services.storage_service import StorageService
 
@@ -23,6 +24,7 @@ class MidiaService:
         self.rdo_repo = RDORepository()
         self.storage = StorageService()
         self.ia = IAService()
+        self.geocoding = GeocodingService()
 
     async def listar(self, id_rdo: str) -> list[dict]:
         if not await self.rdo_repo.buscar_por_id(id_rdo):
@@ -69,13 +71,23 @@ class MidiaService:
         doc["storage_key"] = storage_key
         return await self.repo.criar(doc)
 
-    async def analisar_em_background(self, id_midia: str, storage_url: str) -> None:
-        """Executado como BackgroundTask: roda análise de IA e persiste o resultado."""
+    async def processar_em_background(
+        self, id_midia: str, storage_url: str, latitude: float, longitude: float
+    ) -> None:
+        """Executado como BackgroundTask: análise de IA + geocodificação reversa do
+        local da evidência, persistindo ambos sem bloquear o upload."""
         try:
             analise = await self.ia.analisar_imagem(storage_url)
             await self.repo.atualizar(id_midia, {"ai_analise": analise})
         except Exception as exc:  # noqa: BLE001
             logger.warning("Falha na análise de IA da mídia %s: %s", id_midia, exc)
+
+        try:
+            endereco = await self.geocoding.reverso(latitude, longitude)
+            if endereco:
+                await self.repo.atualizar(id_midia, {"endereco": endereco})
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Falha na geocodificação da mídia %s: %s", id_midia, exc)
 
     async def deletar(self, id_rdo: str, id_midia: str) -> None:
         rdo = await self.rdo_repo.buscar_por_id(id_rdo)

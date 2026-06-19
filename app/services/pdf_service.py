@@ -58,11 +58,31 @@ th { background: #eef2f7; }
 .muted { color: #777; }
 .barra { background: #eef2f7; border: 1px solid #cfcfcf; height: 14px; width: 200px; display: inline-block; }
 .barra > span { display: block; height: 100%; background: #003366; }
+.md { font-size: 11px; line-height: 1.5; }
+.md p { margin: 4px 0; }
+.md strong, .md b { color: #003366; }
+.md ul, .md ol { margin: 4px 0 4px 18px; padding: 0; }
+.md li { margin: 2px 0; }
+.md h1, .md h2, .md h3 { color: #003366; background: none; padding: 0; margin: 8px 0 4px;
+                         font-size: 12px; }
+.md table { margin: 6px 0; }
 """
 
 
 def _e(valor) -> str:
     return html.escape(str(valor)) if valor is not None else ""
+
+
+def _md(texto) -> str:
+    """Converte markdown (negrito, listas, títulos) em HTML para melhor UX no PDF.
+
+    O texto gerado pela IA usa marcações markdown (**negrito**, listas, etc.); sem
+    conversão elas apareceriam literalmente (asteriscos crus) no dossiê."""
+    if not texto:
+        return ""
+    import markdown as _markdown
+
+    return _markdown.markdown(str(texto), extensions=["extra", "sane_lists", "nl2br"])
 
 
 def _fmt_data(valor) -> str:
@@ -256,6 +276,19 @@ class PDFService:
         else:
             sig_cards = "<div class='sig muted'>Pendente de assinatura eletrônica.</div>"
 
+        resp_rdo_rows = "".join(
+            f"<tr><td>{_e(r.get('nome'))}</td><td>{_e(r.get('cargo') or '—')}</td>"
+            f"<td>{_e(r.get('art') or '—')}</td></tr>"
+            for r in (obra.get("responsaveis") or [])
+        )
+        responsaveis_html = (
+            "<h2>RESPONSÁVEIS TÉCNICOS (ART)</h2>"
+            "<table><tr><th>Nome</th><th>Cargo</th><th>ART</th></tr>"
+            f"{resp_rdo_rows}</table>"
+            if resp_rdo_rows
+            else ""
+        )
+
         hash_rodape = (
             f"sha256:{hash_documento}" if hash_documento else "(hash calculado na emissão)"
         )
@@ -273,11 +306,14 @@ class PDFService:
 <h1>Registro do Diário de Obra (RDO)</h1>
 <table>
   <tr><th>Obra</th><td>{_e(obra.get('objeto_contratual'))}</td></tr>
-  <tr><th>Local</th><td>{_e(obra.get('local_descricao'))}</td></tr>
+  <tr><th>Local</th><td>{_e(obra.get('endereco') or obra.get('local_descricao'))}</td></tr>
   <tr><th>Contratante</th><td>SUAPE</td><th>Contratada</th><td>{_e(empresa.get('razao_social'))}</td></tr>
   <tr><th>Prazo (dias)</th><td>{prazo}</td><th>Decorrido</th><td>{decorrido}</td></tr>
   <tr><th>Restante</th><td>{restante}</td><th>Tipologia</th><td>{_e(obra.get('tipologia'))}</td></tr>
+  <tr><th>Fiscal SUAPE — ART</th><td>{_e(obra.get('art_fiscal_suape') or '—')}</td>
+      <th>Fiscal Externo — ART</th><td>{_e(obra.get('art_fiscal_externo') or '—')}</td></tr>
 </table>
+{responsaveis_html}
 
 <h2>CONDIÇÕES CLIMÁTICAS</h2>
 <table>{clima_linha('Manhã', clima_m)}{clima_linha('Tarde', clima_t)}</table>
@@ -460,6 +496,13 @@ class PDFService:
             f"<h2>5. REGISTRO FOTOGRÁFICO</h2><div class='grid2'>{fotos}</div>" if fotos else ""
         )
 
+        # Responsáveis técnicos e ARTs (preservados conforme cadastro atual da obra).
+        resp_rows = "".join(
+            f"<tr><td>{_e(r.get('nome'))}</td><td>{_e(r.get('cargo') or '—')}</td>"
+            f"<td>{_e(r.get('art') or '—')}</td><td>{_e(r.get('documento') or '—')}</td></tr>"
+            for r in (obra.get("responsaveis") or [])
+        ) or '<tr><td colspan="4" class="muted">Nenhum responsável técnico cadastrado.</td></tr>'
+
         # Índice dos RDOs cujos documentos completos seguem anexos, na íntegra.
         rdos_rows = "".join(
             f"<tr><td>{_fmt_data(r.get('data_relatorio'))}</td>"
@@ -478,9 +521,17 @@ class PDFService:
 </div>
 <h1>Dossiê Executivo da Obra</h1>
 <p><b>Objeto:</b> {_e(obra.get('objeto_contratual'))}</p>
+<p><b>Local:</b> {_e(obra.get('endereco') or obra.get('local_descricao'))}</p>
+
+<h2>RESPONSÁVEIS TÉCNICOS</h2>
+<table>
+  <tr><th>Fiscal SUAPE — ART</th><td>{_e(obra.get('art_fiscal_suape') or '—')}</td>
+      <th>Fiscal Externo — ART</th><td>{_e(obra.get('art_fiscal_externo') or '—')}</td></tr>
+</table>
+<table><tr><th>Responsável</th><th>Cargo</th><th>ART</th><th>Registro</th></tr>{resp_rows}</table>
 
 <h2>1. RESUMO EXECUTIVO (gerado por IA)</h2>
-<p>{_e(resumo).replace(chr(10), '<br>')}</p>
+<div class="md">{_md(resumo)}</div>
 
 <h2>2. INDICADORES CONSOLIDADOS</h2>
 <table>

@@ -28,6 +28,9 @@ class Settings(BaseSettings):
 
     WEATHER_API_KEY: str = ""
 
+    # Token público do Cesium ion para visualização 3D do mapa no frontend.
+    CESIUM_ION_ACCESS_TOKEN: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

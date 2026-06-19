@@ -67,6 +67,12 @@ class StorageService:
         await asyncio.to_thread(_put)
         return self.url_publica(key), key
 
+    async def upload_logo(
+        self, conteudo: bytes, id_empresa: str, content_type: str = "image/png"
+    ) -> tuple[str, str]:
+        key = f"empresas/{id_empresa}/logo/{uuid.uuid4()}.{self._extensao(content_type)}"
+        return await self._upload_bytes(conteudo, key, content_type)
+
     async def upload_pdf(self, conteudo: bytes, id_rdo: str) -> tuple[str, str]:
         key = f"rdos/{id_rdo}/pdf/{uuid.uuid4()}.pdf"
         return await self._upload_bytes(conteudo, key, "application/pdf")
